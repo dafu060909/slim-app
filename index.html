@@ -72,6 +72,7 @@ function watch(sha){
   function chk(){get(cfg.path).then(function(r){return r.ok?r.json():null}).then(function(j){
     if(j&&j.sha&&j.sha!==sha){try{localStorage.setItem(CACHE_KEY,JSON.stringify({sha:j.sha,html:decodeURIComponent(escape(atob(j.content.replace(/\s/g,''))))}))}catch(e){};location.reload()}
   }).catch(function(){})}
+  setTimeout(chk,800);            // 打开后马上查一次新版本（之前要等 5 分钟）
   setInterval(chk,5*60*1000);
   document.addEventListener('visibilitychange',function(){if(!document.hidden)chk()});
 }
