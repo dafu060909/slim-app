@@ -50,9 +50,11 @@ function get(path,accept){
     {signal:ctl.signal,headers:{Authorization:'token '+cfg.token,Accept:accept||'application/vnd.github+json'}})
     .finally(function(){clearTimeout(to)});
 }
-function inject(html){
+function inject(html,sha){
   window.__SL_HUB={owner:cfg.owner,repo:cfg.repo,token:cfg.token};
-  document.open(); document.write(html.replace('<head>','<head><script>window.__SL_HUB='+JSON.stringify(window.__SL_HUB)+'<\/script>')); document.close();
+  // 必须等加载器自身解析完再整页替换：解析期间 document.write 会插在原页面中间（旧版 bug：页面上残留「加载中…」）
+  var go=function(){setTimeout(function(){document.open();document.write(html);document.close();watch(sha)},0)};
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',go);else go();
 }
 function fetchApp(){
   return get(cfg.path).then(function(r){
@@ -76,8 +78,8 @@ function watch(sha){
 function boot(){
   if(!cfg||!cfg.token){setup();return}
   var cache=null; try{cache=JSON.parse(localStorage.getItem(CACHE_KEY)||'null')}catch(e){}
-  if(cache&&cache.html){inject(cache.html);watch(cache.sha);return}   // 有缓存先秒开，后台检查更新
-  fetchApp().then(function(a){inject(a.html);watch(a.sha)}).catch(function(e){
+  if(cache&&cache.html){inject(cache.html,cache.sha);return}   // 有缓存先秒开，后台检查更新
+  fetchApp().then(function(a){inject(a.html,a.sha)}).catch(function(e){
     if(e&&e.auth)setup(e.auth===404?'找不到仓库或文件，检查用户名/仓库名':'令牌无效或没有该仓库权限');
     else setup('网络不通，请稍后再试');
   });
