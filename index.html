@@ -26,7 +26,7 @@ button{width:100%;border:0;border-radius:12px;padding:12px;font:inherit;font-wei
 (function(){
 // 加载器：不含任何私有内容。只负责拿 token → 拉取私有仓库的 tracker.html → 注入
 var CFG_KEY='sl_cfg', CACHE_KEY='sl_cache_v1';
-var DEFAULT={owner:'dafu060909',repo:'slim-tracker',path:'app/tracker.html'};
+var DEFAULT={owner:'dafu060909',repo:'slim-tracker-',path:'app/tracker.html'};
 var cfg=null; try{cfg=JSON.parse(localStorage.getItem(CFG_KEY)||'null')}catch(e){}
 
 if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(function(){})}
