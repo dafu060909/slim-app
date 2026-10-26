@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="轻盈计划">
+<meta name="theme-color" content="#f6f4ef">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.png">
+<title>轻盈计划</title>
+<style>
+body{margin:0;background:#f6f4ef;color:#22252a;font:15px/1.5 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+.box{max-width:420px;margin:12vh auto 0;padding:22px}
+h1{font-size:22px;margin:0 0 6px}p{color:#8a8f98;margin:0 0 16px}
+input{width:100%;box-sizing:border-box;border:1px solid #e8e4dc;border-radius:10px;padding:11px;font:inherit;margin:6px 0 10px;background:#fff}
+button{width:100%;border:0;border-radius:12px;padding:12px;font:inherit;font-weight:600;background:#4f8a6e;color:#fff}
+#msg{color:#c9524a;font-size:13px;margin-top:10px}
+.load{text-align:center;margin-top:40vh;color:#8a8f98}
+</style>
+</head>
+<body>
+<div id="root" class="load">加载中…</div>
+<script>
+(function(){
+// 加载器：不含任何私有内容。只负责拿 token → 拉取私有仓库的 tracker.html → 注入
+var CFG_KEY='sl_cfg', CACHE_KEY='sl_cache_v1';
+var DEFAULT={owner:'dafu060909',repo:'slim-tracker',path:'app/tracker.html'};
+var cfg=null; try{cfg=JSON.parse(localStorage.getItem(CFG_KEY)||'null')}catch(e){}
+
+if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(function(){})}
+
+function setup(err){
+  var r=document.getElementById('root'); r.className='box';
+  r.innerHTML='<h1>轻盈计划</h1><p>第一次打开，填一次就好，之后自动登录。</p>'+
+   '<label>GitHub 用户名</label><input id="o" value="'+(cfg&&cfg.owner||DEFAULT.owner)+'">'+
+   '<label>私有仓库名</label><input id="r" value="'+(cfg&&cfg.repo||DEFAULT.repo)+'">'+
+   '<label>访问令牌（fine-grained token）</label><input id="t" type="password" autocomplete="off" placeholder="github_pat_…">'+
+   '<button id="go">进入</button><div id="msg">'+(err||'')+'</div>';
+  document.getElementById('go').onclick=function(){
+    cfg={owner:document.getElementById('o').value.trim(),repo:document.getElementById('r').value.trim(),token:document.getElementById('t').value.trim(),path:DEFAULT.path};
+    if(!cfg.owner||!cfg.repo||!cfg.token){document.getElementById('msg').textContent='三项都要填';return}
+    localStorage.setItem(CFG_KEY,JSON.stringify(cfg)); localStorage.removeItem(CACHE_KEY); boot();
+  };
+}
+function get(path,accept){
+  var ctl=new AbortController(), to=setTimeout(function(){ctl.abort()},10000);
+  return fetch('https://api.github.com/repos/'+cfg.owner+'/'+cfg.repo+'/contents/'+path+'?t='+Date.now(),
+    {signal:ctl.signal,headers:{Authorization:'token '+cfg.token,Accept:accept||'application/vnd.github+json'}})
+    .finally(function(){clearTimeout(to)});
+}
+function inject(html){
+  window.__SL_HUB={owner:cfg.owner,repo:cfg.repo,token:cfg.token};
+  document.open(); document.write(html.replace('<head>','<head><script>window.__SL_HUB='+JSON.stringify(window.__SL_HUB)+'<\/script>')); document.close();
+}
+function fetchApp(){
+  return get(cfg.path).then(function(r){
+    if(r.status===401||r.status===403||r.status===404)throw {auth:r.status};
+    if(!r.ok)throw new Error(r.status);
+    return r.json();
+  }).then(function(j){
+    var html=decodeURIComponent(escape(atob(j.content.replace(/\s/g,''))));
+    try{localStorage.setItem(CACHE_KEY,JSON.stringify({sha:j.sha,html:html}))}catch(e){}
+    return {sha:j.sha,html:html};
+  });
+}
+function watch(sha){
+  // 每 5 分钟 & 回到前台时检查新版本，sha 变了就刷新
+  function chk(){get(cfg.path).then(function(r){return r.ok?r.json():null}).then(function(j){
+    if(j&&j.sha&&j.sha!==sha){try{localStorage.setItem(CACHE_KEY,JSON.stringify({sha:j.sha,html:decodeURIComponent(escape(atob(j.content.replace(/\s/g,''))))}))}catch(e){};location.reload()}
+  }).catch(function(){})}
+  setInterval(chk,5*60*1000);
+  document.addEventListener('visibilitychange',function(){if(!document.hidden)chk()});
+}
+function boot(){
+  if(!cfg||!cfg.token){setup();return}
+  var cache=null; try{cache=JSON.parse(localStorage.getItem(CACHE_KEY)||'null')}catch(e){}
+  if(cache&&cache.html){inject(cache.html);watch(cache.sha);return}   // 有缓存先秒开，后台检查更新
+  fetchApp().then(function(a){inject(a.html);watch(a.sha)}).catch(function(e){
+    if(e&&e.auth)setup(e.auth===404?'找不到仓库或文件，检查用户名/仓库名':'令牌无效或没有该仓库权限');
+    else setup('网络不通，请稍后再试');
+  });
+}
+boot();
+})();
+</script>
+</body>
+</html>
